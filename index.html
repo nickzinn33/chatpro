@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Pro 100% - Gerador de Sensis</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin:0; padding:0; }
+body {
+  font-family: 'Roboto', sans-serif;
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+  min-height:100vh;
+  background: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80') no-repeat center center fixed;
+  background-size: cover;
+}
+header {
+  width:100%; max-width:480px;
+  background:#075E54;
+  color:white;
+  padding:20px;
+  text-align:center;
+  font-size:22px; font-weight:500;
+  box-shadow:0 4px 6px rgba(0,0,0,0.2);
+  border-radius:0 0 15px 15px;
+}
+#instrucao {
+  max-width:480px;
+  color:#128C7E;
+  margin:10px 0 5px 0;
+  font-size:14px;
+  text-align:center;
+}
+#contador {
+  max-width:480px;
+  text-align:right;
+  font-size:14px;
+  color:#128C7E;
+  margin-bottom:5px;
+}
+#chat-container {
+  width:100%; max-width:480px;
+  height:70vh;
+  border-radius:15px;
+  display:flex; flex-direction:column;
+  box-shadow:0 4px 8px rgba(0,0,0,0.1);
+  overflow:hidden; 
+  position:relative;
+  background: rgba(255,255,255,0.3);
+  backdrop-filter: blur(4px);
+}
+#chat {
+  flex:1;
+  overflow-y:auto;
+  padding:10px;
+  display:flex; flex-direction:column;
+  gap:8px;
+}
+.mensagem {
+  max-width:75%;
+  padding:12px 18px;
+  border-radius:25px;
+  font-size:16px;
+  line-height:1.4;
+  word-wrap:break-word;
+  position:relative;
+  opacity:0;
+  transform:translateY(20px);
+  animation: aparecer 0.3s forwards;
+  box-shadow:0 2px 4px rgba(0,0,0,0.2);
+}
+@keyframes aparecer {
+  to { opacity:1; transform:translateY(0); }
+}
+.usuario { align-self:flex-end; background:#dcf8c6; border-bottom-right-radius:5px; }
+.bot { align-self:flex-start; background:#ffffffcc; border-bottom-left-radius:5px; display:flex; align-items:flex-start; gap:8px; }
+.bot-avatar { width:32px; height:32px; border-radius:50%; background:#25D366; display:flex; justify-content:center; align-items:center; color:white; font-weight:bold; font-size:16px; flex-shrink:0; }
+.digitando { font-style:italic; color:gray; }
+#input-container { display:flex; padding:10px; gap:10px; border-top:1px solid #ccc; background:#f0f0f0; border-radius:0 0 15px 15px; }
+#pergunta { flex:1; padding:12px 18px; border-radius:25px; border:1px solid #ccc; font-size:16px; outline:none; transition:border 0.2s; }
+#pergunta:focus { border-color:#075E54; }
+#enviar-btn { width:50px; height:50px; border-radius:50%; border:none; background:#25D366; color:white; font-size:22px; cursor:pointer; display:flex; justify-content:center; align-items:center; transition:background 0.2s, transform 0.2s; }
+#enviar-btn:hover { background:#128C7E; transform:scale(1.1); }
+#chat::-webkit-scrollbar { width:6px; }
+#chat::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.2); border-radius:3px; }
+#notificacao { position:fixed; bottom:90px; right:20px; background:#25D366; color:white; padding:10px 18px; border-radius:20px; box-shadow:0 4px 8px rgba(0,0,0,0.2); display:none; font-weight:500; animation: subir 0.5s forwards; }
+@keyframes subir { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+
+<audio id="som-bolha" src="https://freesound.org/data/previews/341/341695_5260877-lq.mp3" preload="auto"></audio>
+
+<header>Chat Pro 100% - Gerador de Sensis</header>
+<div id="instrucao">(Converse, gere sensis, peça piadas ou cantadas. Para sensi: escreva "gerar sensi")</div>
+<div id="contador">Sensis geradas: 0</div>
+
+<div id="chat-container">
+  <div id="chat"></div>
+  <div id="input-container">
+    <input type="text" id="pergunta" placeholder="Digite sua pergunta">
+    <button id="enviar-btn" onclick="responder()">➤</button>
+  </div>
+</div>
+
+<div id="notificacao">Nova mensagem do bot!</div>
+
+<script>
+let aguardandoModelo=false;
+let ultimaPiada=-1;
+let ultimaCantada=-1;
+let sensisGeradas=0;
+
+function removerAcentos(str){ return str.normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function mostrarNotificacao(msg){ const notif=document.getElementById("notificacao"); notif.innerText=msg; notif.style.display="block"; setTimeout(()=>{notif.style.display="none";},2500); }
+
+let respostas = {
+  "oi":"Olá! Como posso te ajudar?", "ola":"Olá! Como posso te ajudar?",
+  "bom dia":"Bom dia! ☀️", "boa tarde":"Boa tarde! 🌤️", "boa noite":"Boa noite! 🌙",
+  "tudo bem":"Tudo ótimo! E você?", "tudo bom":"Tudo ótimo! E você?",
+  "senha":"Ok, me diga o modelo do seu celular: Samsung, iPhone, Xiaomi ou Motorola.",
+  "sensi":"Ok, me diga o modelo do seu celular: Samsung, iPhone, Xiaomi ou Motorola.",
+  "gerar sensi":"Ok, me diga o modelo do seu celular: Samsung, iPhone, Xiaomi ou Motorola.",
+  "samsung":"SAMSUNG\n200\n179\n198\n197\n150\n66\nDpi 518.",
+  "iphone":"IPHONE\n178\n190\n180\n187\n50\n69.",
+  "xiaomi":"XIAOMI\n192\n177\n195\n198\n200\n56\nDpi 544.",
+  "motorola":"MOTOROLA\n198\n195\n189\n190\n58\n200\nDpi 645"
+};
+
+let piadas = [
+  "Por que o livro de matemática se suicidou? Porque tinha muitos problemas.",
+  "O que o chão falou para a parede? Nos encontramos no canto!",
+  "Por que o computador foi ao médico? Porque pegou um vírus!",
+  "Qual é o cúmulo da velocidade? Fechar a gaveta antes do armário.",
+  "Por que o peixe não gosta de estudar? Porque ele fica sempre na água.",
+  "Como o elétron atende ao telefone? Próton!",
+  "O que é um vegetariano que come carne? Um ex-vegetariano.",
+  "Qual é o animal mais antigo? A zebra, porque está em preto e branco.",
+  "Por que o jacaré tirou o filho da escola? Porque ele réptil de ano.",
+  "O que o zero disse para o oito? Belo cinto!"
+];
+
+let cantadas = [
+  "Se beleza fosse tempo, você seria a eternidade.",
+  "Você é tão doce que até o açúcar fica com inveja.",
+  "Se você fosse uma estrela, eu passaria a noite inteira te admirando.",
+  "Posso te seguir? Porque meus pais sempre me disseram para seguir meus sonhos.",
+  "Se eu fosse um gato, passaria todas as minhas 9 vidas com você.",
+  "Você não é Google, mas tem tudo que eu procuro.",
+  "Se beleza fosse crime, você estaria presa para sempre.",
+  "Se você fosse um fruto, seria uma bela melancia.",
+  "Se você fosse um vegetal, seria um pepino lindo.",
+  "Posso te oferecer uma piada ou prefere que eu te conquiste primeiro?",
+  "Se eu tivesse uma estrela para cada vez que você ilumina meu dia, teria o universo inteiro.",
+  "Você deve ser uma câmera, porque cada vez que eu olho, sorrio.",
+  "Você não é Wi-Fi, mas estou sentindo a conexão.",
+  "Se fosse um sonho, não quero acordar.",
+  "Você é tão linda que até o sol fica com inveja.",
+  "Você é música para os meus olhos.",
+  "Se você fosse um livro, eu não conseguiria parar de ler.",
+  "Você ilumina mais que qualquer lâmpada.",
+  "Se eu pudesse reorganizar o alfabeto, colocaria U e I juntos.",
+  "Você é o motivo do meu sorriso hoje."
+];
+
+// Mensagem inicial
+window.onload = () => {
+  const chat=document.getElementById("chat");
+  const botDiv=document.createElement("div");
+  botDiv.className="mensagem bot";
+  botDiv.innerHTML=`<div class="bot-avatar">B</div><div><b>Bot:</b> Olá! Bem-vindo ao Chat Pro! 🎉<br>Digite algo para começar ou "gerar sensi" para criar uma sensi.</div>`;
+  chat.appendChild(botDiv);
+};
+
+function responder(){
+  let pergunta=document.getElementById("pergunta").value;
+  if(!pergunta) return;
+  let perguntaSemAcento=removerAcentos(pergunta.toLowerCase());
+  let resposta="Não entendi sua pergunta.";
+
+  const chat=document.getElementById("chat");
+
+  if(aguardandoModelo){
+    let modeloEscolhido="";
+    for(let key of ["samsung","iphone","xiaomi","motorola"]){
+      if(perguntaSemAcento.includes(key)){
+        modeloEscolhido=key;
+        resposta=respostas[key];
+        sensisGeradas++;
+        document.getElementById("contador").innerText=`Sensis geradas: ${sensisGeradas}`;
+        break;
+      }
+    }
+    if(resposta==="Não entendi sua pergunta.") resposta="Modelo não reconhecido. Digite: Samsung, iPhone, Xiaomi ou Motorola.";
+    else setTimeout(()=>{
+      const msgExtra=document.createElement("div");
+      msgExtra.className="mensagem bot";
+      msgExtra.innerHTML=`<div class="bot-avatar">B</div><div><b>Bot:</b> Obrigado pela sua compra de sensi!<br>Caso queira outra sensi, mande novamente (gerar sensi)</div>`;
+      chat.appendChild(msgExtra);
+      chat.scrollTop=chat.scrollHeight;
+      document.getElementById("som-bolha").play();
+    },1500);
+    aguardandoModelo=false;
+  } else {
+    if(perguntaSemAcento.includes("piada")){
+      let idx; do { idx=Math.floor(Math.random()*piadas.length); } while(idx===ultimaPiada); ultimaPiada=idx; resposta=piadas[idx];
+    } else if(perguntaSemAcento.includes("cantada")){
+      let idx; do { idx=Math.floor(Math.random()*cantadas.length); } while(idx===ultimaCantada); ultimaCantada=idx; resposta=cantadas[idx];
+    } else if(perguntaSemAcento.includes("outra")){
+      if(ultimaPiada!==-1){ let idx; do { idx=Math.floor(Math.random()*piadas.length); } while(idx===ultimaPiada); ultimaPiada=idx; resposta=piadas[idx]; }
+      else if(ultimaCantada!==-1){ let idx; do { idx=Math.floor(Math.random()*cantadas.length); } while(idx===ultimaCantada); ultimaCantada=idx; resposta=cantadas[idx]; }
+    } else {
+      for(let key in respostas){ if(perguntaSemAcento.includes(key)){ resposta=respostas[key]; if(key==="gerar sensi") aguardandoModelo=true; break; } }
+    }
+  }
+
+  chat.innerHTML+=`<div class="mensagem usuario"><b>Você:</b> ${pergunta}</div>`;
+
+  let botDiv=document.createElement("div");
+  botDiv.className="mensagem bot digitando";
+  botDiv.innerHTML=`<div class="bot-avatar">B</div><div><b>Bot:</b> digitando...</div>`;
+  chat.appendChild(botDiv);
+  chat.scrollTop=chat.scrollHeight;
+
+  setTimeout(()=>{
+    botDiv.classList.remove("digitando");
+    botDiv.innerHTML=`<div class="bot-avatar">B</div><div><b>Bot:</b> </div>`;
+    let i=0;
+    function digitar(){
+      if(i<resposta.length){
+        botDiv.querySelector('div:last-child').innerHTML+=resposta.charAt(i);
+        i++;
+        chat.scrollTop=chat.scrollHeight;
+        setTimeout(digitar,25);
+      } else { document.getElementById("som-bolha").play(); mostrarNotificacao("Nova mensagem do bot!"); }
+    }
+    digitar();
+  },700);
+
+  document.getElementById("pergunta").value="";
+}
+
+document.getElementById("pergunta").addEventListener("keydown",function(event){ if(event.key==="Enter") responder(); });
+</script>
+</body>
+</html>
